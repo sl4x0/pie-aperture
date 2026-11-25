@@ -38,7 +38,7 @@ jobs:
       name: Ubuntu
       uses: ./.github/workflows/build.yml
       with:
-          deploy: true
+          deploy: false
           os: 'ubuntu-latest'
           amplify-app-id: 'd1xxjuy6vbm7pk'
           package-name: 'nextjs-app-v14'

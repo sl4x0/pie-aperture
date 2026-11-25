@@ -41,7 +41,7 @@ jobs:
       uses: ./.github/workflows/build.yml
       with:
           build-script: 'generate'
-          deploy: true
+          deploy: false
           os: 'ubuntu-latest'
           amplify-app-id: 'd36dan3bxjue8c'
           package-name: 'nuxt-app'

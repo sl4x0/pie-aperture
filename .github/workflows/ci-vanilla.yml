@@ -38,7 +38,7 @@ jobs:
       name: Ubuntu
       uses: ./.github/workflows/build.yml
       with:
-          deploy: true
+          deploy: false
           os: ubuntu-latest
           amplify-app-id: 'd2vb6sjgivffb3'
           package-name: 'vanilla-app'
